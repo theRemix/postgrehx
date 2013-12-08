@@ -256,57 +256,91 @@ class TestPostgres extends TestCase {
 		assertEquals(time, res_time);
 	}
 
-    /**
-      Test exhausting iterators in a multiple requests
-     **/
-    public function testMultipleRequests(){
+	/**
+		Test exhausting iterators in a multiple requests
+	 **/
+	public function testMultipleRequests(){
+		con.request('
+						CREATE TABLE multiplerequests (
+								id SERIAL NOT NULL,
+								name character varying(255),
+								date timestamp without time zone
+								);
+						');
 
-        con.request('
-                CREATE TABLE multiplerequests (
-                    id integer NOT NULL,
-                    name character varying(255),
-                    date timestamp without time zone
-                    );
-                ');
+		con.request('INSERT INTO multiplerequests (name,date) VALUES (${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
 
-        con.request('INSERT INTO multiplerequests VALUES (1, ${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
+		for(i in 0...3){
+				var res = con.request('
+								SELECT * FROM multiplerequests
+								');
+				assertEquals(1, res.length);
+				var r = res.results().first();
+				assertTrue(r.id != null);
+		}
+	}
 
-        for(i in 0...3){
-            var res = con.request('
-                    SELECT * FROM multiplerequests
-                    ');
-            assertEquals(1, res.length);
-            var r = res.results().first();
-            assertTrue(r.id != null);
-        }
-    }
+	/**
+		Test multiple inserts, and getting last insert ids
+	 **/
+	public function testMultipleInserts(){
 
-    public function testSPODManagerTest() {
-        sys.db.Manager.cnx  = con;
+		con.request('
+						CREATE TABLE multipleinserts (
+								id SERIAL NOT NULL,
+								name character varying(255),
+								date timestamp without time zone,
+								CONSTRAINT multiplereinserts_pk PRIMARY KEY (id)
+						);
+						');
 
-        con.request('
-                CREATE TABLE TestSpodObject (
-                    id SERIAL NOT NULL,
-                    name character varying(255),
-                    date timestamp without time zone
-                    );
-                ');
+		for(i in 0...3){
+			con.request('INSERT INTO multipleinserts (name,date) VALUES (${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
+			assertTrue(con.lastInsertId() > 0);
+		}
+	}
 
-        var test_spod_object:TestSpodObject = new TestSpodObject();
-        test_spod_object.name = "test";
-        test_spod_object.date = Date.now();
-        test_spod_object.insert();
+	/**
+		Test single insert, table has no primary key id field, con.lastInsertId() should be null
+	 **/
+	public function testSingleInsert(){
 
-        assertTrue(test_spod_object.id != null);
+		con.request('
+						CREATE TABLE singleinsert (
+								foo character varying(255),
+								date timestamp without time zone
+						);');
+		
+		con.request('INSERT INTO singleinsert (foo,date) VALUES (${con.quote("bar")}, ${con.quote(Std.string(Date.now()))});');
+		
+		assertEquals(con.lastInsertId(), null);
+	}
 
-        if(test_spod_object.id != null){
-            var test_spod_manager:Manager<TestSpodObject> = new Manager<TestSpodObject>(TestSpodObject);
-            var get_spod_object:TestSpodObject = test_spod_manager.get(test_spod_object.id);
-            assertTrue(get_spod_object != null);
-            assertTrue(get_spod_object.name == "test");
-        }
+	public function testSPODManagerTest() {
+		sys.db.Manager.cnx	= con;
 
-    }
+		con.request('
+						CREATE TABLE TestSpodObject (
+								id SERIAL NOT NULL,
+								name character varying(255),
+								date timestamp without time zone
+								);
+						');
+
+		var test_spod_object:TestSpodObject = new TestSpodObject();
+		test_spod_object.name = "test";
+		test_spod_object.date = Date.now();
+		test_spod_object.insert();
+
+		assertTrue(test_spod_object.id != null);
+
+		if(test_spod_object.id != null){
+				var test_spod_manager:Manager<TestSpodObject> = new Manager<TestSpodObject>(TestSpodObject);
+				var get_spod_object:TestSpodObject = test_spod_manager.get(test_spod_object.id);
+				assertTrue(get_spod_object != null);
+				assertTrue(get_spod_object.name == "test");
+		}
+	}
 
 }
 

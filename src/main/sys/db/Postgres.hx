@@ -129,7 +129,7 @@ class PostgresConnection implements sys.db.Connection {
                 return false;
             },
             next : function(){
-                var res : Array<Bytes>;
+                var res : Array<Bytes> = [];
                 switch(current_message){
                     case DataRow(fields) : res = fields;
                     case ni              : unexpectedMessage(current_message, 'getDataRowIterator.next');
@@ -262,13 +262,19 @@ class PostgresConnection implements sys.db.Connection {
 		if (v == null || Std.is(v,Int)){
 			s.add(v);
 		} else if (Std.is(v,Bool)){
-			s.add(if (cast v) 1 else 0);
+			s.add(if (cast v) "TRUE" else "FALSE");
 		} else {
 			s.add(quote(Std.string(v)));
 		}
 	}
 
-	public function lastInsertId() return this.last_insert_id;
+	public function lastInsertId():Int{
+    try{
+      var res = request("SELECT LASTVAL()");
+      return Std.parseInt(res.next().lastval);  
+    }catch(e:Dynamic) return null;
+    // this.last_insert_id is still 0, needs to be null
+  };
 	public function dbName() return "PostgreSQL";
 	public function startTransaction() request("BEGIN;");
 	public function commit()request("COMMIT;");
