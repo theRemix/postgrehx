@@ -345,7 +345,9 @@ class TestPostgres extends TestCase {
 				var get_spod_object:TestSpodObject = test_spod_manager.get(test_spod_object.id);
 				assertTrue(get_spod_object != null);
 				assertTrue(get_spod_object.name == "test");
+				assertTrue(get_spod_object.is_active);
 		}
+
 	}
 
 }
