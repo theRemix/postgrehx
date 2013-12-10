@@ -350,5 +350,47 @@ class TestPostgres extends TestCase {
 
 	}
 
+	/**
+		Test TIMESTAMP -> Date
+	 **/
+	public function testTimestampDate(){
+		con.request('
+						CREATE TABLE timestampdate (
+								id SERIAL NOT NULL,
+								name character varying(255),
+								date date,
+								time time without time zone,
+								timetz time with time zone,
+								timestamp timestamp without time zone,
+								timestamptz timestamp with time zone
+								);
+						');
+
+		con.request('INSERT INTO timestampdate (name, date, time, timetz, timestamp, timestamptz) 
+								 VALUES (
+									${con.quote("foo")},
+									${con.quote("1999-01-08")},
+									${con.quote("04:05")},
+									${con.quote("04:05:06 +10")},
+									${con.quote("1999-01-08 04:05:06")},
+									${con.quote("1999-01-08 04:05:06 +10")}
+								 );');
+
+		var res = con.request('SELECT * FROM timestampdate');
+		var r = res.results().first();
+		
+		assertTrue(Std.is(r.date, Date));
+		assertTrue(Std.is(r.time, Date));
+		assertTrue(Std.is(r.timetz, Date));
+		assertTrue(Std.is(r.timestamp, Date));
+		assertTrue(Std.is(r.timestamptz, Date));
+		assertEquals(r.date, Date.fromString('1999-01-08 00:00:00'));
+		assertEquals(r.time, Date.fromString('1970-01-01 04:05:00'));
+		assertEquals(r.timetz, Date.fromString('1970-01-01 14:05:06'));
+		assertEquals(r.timestamp, Date.fromString('1999-01-08 04:05:06'));
+		assertEquals(r.timestamptz, Date.fromString('1999-01-08 04:05:06 +10'));
+
+	}
+
 }
 

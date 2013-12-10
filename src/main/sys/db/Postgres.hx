@@ -405,15 +405,46 @@ class PostgresResultSet implements ResultSet {
 	public function	results() return Lambda.list([ for (f in this) f] );
 
 	/**
-	  Utility function to parse a postgres timestamp into a Haxe date.
+		Utility function to parse a postgres timestamp into a Haxe date.
 	 **/
 	static function parseTimeStampTz(stamp:String){
 #if !php
-        // php needs the time zone information, and will ignore the millisecond
-        // argument.  Other platforms need to have this removed.
-		stamp = stamp.split('.')[0];
+			// php needs the time zone information, and will ignore the millisecond
+			// argument.	Other platforms need to have this removed.
+			stamp = stamp.split('.')[0];
 #end
-	    return Date.fromString(stamp);
+			return Date.fromString(stamp);
+	}
+
+  /**
+    Utility function to parse a postgres time into a Haxe date.
+   **/
+  static function parseTimeTz(time:String){
+#if !php
+			// php needs the time zone information, and will ignore the millisecond
+			// argument.	Other platforms need to have this removed.
+			time = time.split('.')[0];
+#end
+			var ts = time.split(':');
+			
+			var h = ts[0];
+			var m = ts[1];
+			var s = ts[2];
+			var tz = 0.0;
+			// check for timezone
+			if(s.indexOf('-')>0){
+				var tzs = s.split('-');
+				s = tzs[0];
+				tz = -Std.parseFloat(tzs[1]);
+			}else if(s.indexOf('+')>0){
+				var tzs = s.split('+');
+				s = tzs[0];
+				tz = Std.parseFloat(tzs[1]);
+			}
+			return Date.fromTime(
+				DateTools.hours(Std.parseFloat(h)+tz)+
+				DateTools.minutes(Std.parseFloat(m))+
+				DateTools.seconds(Std.parseFloat(s)));
 	}
 
 	/**
@@ -431,7 +462,11 @@ class PostgresResultSet implements ResultSet {
 			case DataType.oidJSON        : haxe.Json.parse(string);
 			case DataType.oidFLOAT4      : Std.parseFloat(string);
 			case DataType.oidFLOAT8      : Std.parseFloat(string);
-			case DataType.oidTIMESTAMPTZ : parseTimeStampTz(string);
+			case DataType.oidDATE,
+           DataType.oidTIMESTAMP,
+           DataType.oidTIMESTAMPTZ : parseTimeStampTz(string);
+      case DataType.oidTIME,
+           DataType.oidTIMETZ      : parseTimeTz(string);
 			default                      : string;
 		}
 
