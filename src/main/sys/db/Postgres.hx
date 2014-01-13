@@ -373,6 +373,9 @@ class PostgresResultSet implements ResultSet {
 	}
 
 	public function	getIntResult(col_idx: Int){
+    if(current_row == null) {
+      this.next(); 
+    }
 		var bytes = current_row[col_idx];
 		return cast Std.parseInt(bytes.toString());
 	}
