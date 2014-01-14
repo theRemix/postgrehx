@@ -1,60 +1,18 @@
 package sys.db;
 import sys.db.Postgres;
-import sys.db.pgsql.Error;
+import sys.db.TestBase;
+import sys.db.Connection;
 import haxe.unit.TestCase;
-import sys.db.Types;
-import sys.db.Sqlite;
-
-@:table("TestSpodObject")
-class TestSpodObject extends sys.db.Object{
-    public var id: SUId;
-    public var name: SString<255>;
-    public var date: SDate;
-    public var is_active: SBool;
-}
 
 class TestPostgres extends TestCase {
 
-    inline static var user   = "test_haxe_user";
-    inline static var pass   = "test_haxe_pass";
-    inline static var db     = "test_haxe_db";
-    inline static var schema = "test_haxe_schema";
 
-	var con : sys.db.Connection;
+	var con : Connection;
 
-	/**
-	  Nuke the default schema every time the test is run
-	 **/
-    public static function __init__(){
-        // resetting the db on travis causes errors, and isn't necessary
-        if (Sys.getEnv("TRAVIS") != "true") {
-            var initcon = Postgres.connect({
-                host     : "localhost",
-                user     : user,
-                database : db,
-                pass     : pass
-            });
-            initcon.request('drop schema if exists $schema cascade');
-            initcon.request('create schema $schema');
-            initcon.close;
-        }
+	public function new() {
+	    super();
+	    con = TestBase.setup();
     }
-
-	override public function setup(){
-	    var set_user = user;
-	    var set_pass = pass;
-
-	    if (Sys.getEnv("TRAVIS") == "true"){
-            set_user = "postgres";
-            set_pass = "";
-        }
-        con = Postgres.connect({
-            host	 : "localhost",
-            user	 : set_user,
-            database : db,
-            pass	 : set_pass
-        });
-	}
 
 	/**
 	  Am I even who I say I am?
@@ -188,7 +146,8 @@ class TestPostgres extends TestCase {
 			Address   : "Somewhere",
 			City      : "Someplace",
 			MaxInt32  : max_int_32,
-			MinInt32  : min_int_32
+			MinInt32  : min_int_32,
+			IsPerson  : true,
 		}
 
 		con.request('
@@ -199,7 +158,8 @@ class TestPostgres extends TestCase {
 					"Address"   varchar(255),
 					"City"      varchar(255),
 					"MaxInt32"  int,
-					"MinInt32"  int
+					"MinInt32"  int,
+					"IsPerson"  bool
 					); '
 				);
 
@@ -211,7 +171,8 @@ class TestPostgres extends TestCase {
 					${con.quote(person.Address)},
 					${con.quote(person.City)},
 				    ${person.MaxInt32},
-				    ${person.MinInt32}
+				    ${person.MinInt32},
+				    ${person.IsPerson}
 					)'
 				);
 
@@ -241,6 +202,7 @@ class TestPostgres extends TestCase {
 		assertEquals(2, Reflect.fields(obj).length);
 		assertTrue(obj.table_schema != null);
 		assertTrue(obj.table_name != null);
+
 	}
 
 	/**
@@ -257,174 +219,28 @@ class TestPostgres extends TestCase {
 		assertEquals(time, res_time);
 	}
 
-	/**
-		Test exhausting iterators in a multiple requests
-	 **/
-	public function testMultipleRequests(){
-		con.request('
-						CREATE TABLE multiplerequests (
-								id SERIAL NOT NULL,
-								name character varying(255),
-								date timestamp without time zone
-								);
-						');
+    /**
+      Test exhausting iterators in a multiple requests
+     **/
+    public function testMultipleRequests(){
+        con.request('
+                CREATE TABLE multiplerequests (
+                    id integer NOT NULL,
+                    name character varying(255),
+                    date timestamp without time zone
+                    );
+                ');
+        con.request('INSERT INTO multiplerequests VALUES (1, ${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
+        for(i in 0...3){
+            var res = con.request('
+                    SELECT * FROM multiplerequests
+                    ');
+            assertEquals(1, res.length);
+            var r = res.results().first();
+            assertTrue(r.id != null);
+        }
+    }
 
-		con.request('INSERT INTO multiplerequests (name,date) VALUES (${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
 
-		for(i in 0...3){
-				var res = con.request('
-								SELECT * FROM multiplerequests
-								');
-				assertEquals(1, res.length);
-				var r = res.results().first();
-				assertTrue(r.id != null);
-		}
-	}
-
-	/**
-		Test multiple inserts, and getting last insert ids
-	 **/
-	public function testMultipleInserts(){
-
-		con.request('
-						CREATE TABLE multipleinserts (
-								id SERIAL NOT NULL,
-								name character varying(255),
-								date timestamp without time zone,
-								CONSTRAINT multiplereinserts_pk PRIMARY KEY (id)
-						);
-						');
-
-		for(i in 0...3){
-			con.request('INSERT INTO multipleinserts (name,date) VALUES (${con.quote("foo")}, ${con.quote(Std.string(Date.now()))});');
-			assertTrue(con.lastInsertId() > 0);
-		}
-	}
-
-	/**
-		Test single insert, table has no primary key id field, con.lastInsertId() should be null
-	 **/
-	public function testSingleInsert(){
-
-		con.request('
-						CREATE TABLE singleinsert (
-								foo character varying(255),
-								date timestamp without time zone
-						);');
-		
-		con.request('INSERT INTO singleinsert (foo,date) VALUES (${con.quote("bar")}, ${con.quote(Std.string(Date.now()))});');
-		
-		assertEquals(con.lastInsertId(), null);
-	}
-
-	/**
-		Test SPOD manager and boolean field insert
-	 **/
-	public function testSPODManagerTest() {
-		sys.db.Manager.cnx	= con;
-
-		con.request('
-            DROP TABLE IF EXISTS TestSpodObject;
-						CREATE TABLE TestSpodObject (
-								id SERIAL NOT NULL,
-								name character varying(255),
-								date timestamp without time zone,
-								is_active bool
-								);
-						');
-
-		var test_spod_object:TestSpodObject = new TestSpodObject();
-		test_spod_object.name = "test";
-		test_spod_object.date = Date.now();
-		test_spod_object.is_active = true;
-		test_spod_object.insert();
-
-		assertTrue(test_spod_object.id != null);
-
-		if(test_spod_object.id != null){
-				var test_spod_manager:Manager<TestSpodObject> = new Manager<TestSpodObject>(TestSpodObject);
-				var get_spod_object:TestSpodObject = test_spod_manager.get(test_spod_object.id);
-				assertTrue(get_spod_object != null);
-				assertTrue(get_spod_object.name == "test");
-				assertTrue(get_spod_object.is_active);
-		}
-
-	}
-
-  /**
-    Test Manager.unsafeCount
-   **/
-  public function testManagerUnsafeCount(){
-    sys.db.Manager.cnx  = con;
-
-    con.request('
-            DROP TABLE IF EXISTS TestSpodObject;
-            CREATE TABLE TestSpodObject (
-                id SERIAL NOT NULL,
-                name character varying(255),
-                date timestamp without time zone,
-                is_active bool
-                );
-            ');
-
-    var test_spod_object_1:TestSpodObject = new TestSpodObject();
-    test_spod_object_1.name = "test 1";
-    test_spod_object_1.insert();
-    var test_spod_object_2:TestSpodObject = new TestSpodObject();
-    test_spod_object_2.name = "test 2";
-    test_spod_object_2.insert();
-    var test_spod_object_3:TestSpodObject = new TestSpodObject();
-    test_spod_object_3.name = "test 3";
-    test_spod_object_3.insert();
-
-    var count = TestSpodObject.manager.unsafeCount("SELECT COUNT(*) FROM TestSpodObject;");
-
-    assertEquals(3, count);
-
-  }
-
-	/**
-		Test TIMESTAMP -> Date
-	 **/
-	/* failing
-  public function testTimestampDate(){
-		con.request('
-						CREATE TABLE timestampdate (
-								id SERIAL NOT NULL,
-								name character varying(255),
-								date date,
-								time time without time zone,
-								timetz time with time zone,
-								timestamp timestamp without time zone,
-								timestamptz timestamp with time zone
-								);
-						');
-
-		con.request('INSERT INTO timestampdate (name, date, time, timetz, timestamp, timestamptz) 
-								 VALUES (
-									${con.quote("foo")},
-									${con.quote("1999-01-08")},
-									${con.quote("04:05")},
-									${con.quote("04:05:06 +10")},
-									${con.quote("1999-01-08 04:05:06")},
-									${con.quote("1999-01-08 04:05:06 +10")}
-								 );');
-
-		var res = con.request('SELECT * FROM timestampdate');
-		var r = res.results().first();
-		
-		assertTrue(Std.is(r.date, Date));
-		assertTrue(Std.is(r.time, Date));
-		assertTrue(Std.is(r.timetz, Date));
-		assertTrue(Std.is(r.timestamp, Date));
-		assertTrue(Std.is(r.timestamptz, Date));
-		assertEquals(r.date, Date.fromString('1999-01-08 00:00:00'));
-		assertEquals(r.time, Date.fromString('1970-01-01 04:05:00'));
-		assertEquals(r.timetz, Date.fromString('1970-01-01 14:05:06'));
-		assertEquals(r.timestamp, Date.fromString('1999-01-08 04:05:06'));
-		assertEquals(r.timestamptz, Date.fromString('1999-01-08 04:05:06 +10'));
-
-	}
-  */
 }
 
